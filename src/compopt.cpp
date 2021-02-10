@@ -134,6 +134,18 @@ const CompOpt compopts[] = {
   {"-stdlib=", AFFECTS_CPP | TAKES_CONCAT_ARG},
   {"-trigraphs", AFFECTS_CPP},
   {"-u", TAKES_ARG | TAKES_CONCAT_ARG},
+
+  {"--cache", TAKES_ARG | TAKES_CONCAT_ARG | AFFECTS_COMP},       // Emscripten
+  {"--em-config", TAKES_ARG | TAKES_CONCAT_ARG | AFFECTS_COMP},   // Emscripten
+  {"--llvm-opts", TAKES_ARG | TAKES_CONCAT_ARG | AFFECTS_COMP},   // Emscripten
+  {"--default-obj-ext", TOO_HARD | TAKES_ARG | TAKES_CONCAT_ARG}, // Emscripten
+  {"--check", TOO_HARD}, // Emscripten
+  {"--clear-cache", TOO_HARD}, // Emscripten
+  {"--clear-ports", TOO_HARD}, // Emscripten
+  {"--show-ports", TOO_HARD}, // Emscripten
+  {"--cflags", TOO_HARD}, // Emscripten
+  {"-s", TAKES_ARG | TAKES_CONCAT_ARG | AFFECTS_COMP},            // Emscripten
+  {"-v", 0}, // Emscripten
 };
 
 static int
