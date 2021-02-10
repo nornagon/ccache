@@ -26,17 +26,6 @@
 namespace Win32Util {
 
 std::string
-add_exe_suffix(const std::string& path)
-{
-  auto ext = Util::to_lowercase(Util::get_extension(path));
-  if (ext == ".exe" || ext == ".bat" || ext == ".sh") {
-    return path;
-  } else {
-    return path + ".exe";
-  }
-}
-
-std::string
 error_message(DWORD error_code)
 {
   LPSTR buffer;
@@ -63,7 +52,11 @@ argv_to_string(const char* const* argv, const std::string& prefix)
 
   do {
     int bs = 0;
-    result += '"';
+    // Quote a cmdline parameter only if it contains spaces and is not already quoted.
+    bool shouldQuote = !!strstr(arg, " ") && !(arg[0] == '"' && arg[strlen(arg)-1] == '"');
+    if (shouldQuote) {
+      result += '"';
+    }
     for (size_t j = 0; arg[j]; ++j) {
       switch (arg[j]) {
       case '\\':
@@ -86,7 +79,10 @@ argv_to_string(const char* const* argv, const std::string& prefix)
       result += '\\';
       --bs;
     }
-    result += "\" ";
+    if (shouldQuote) {
+      result += '"';
+    }
+    result += ' ';
   } while ((arg = argv[i++]));
 
   result.resize(result.length() - 1);

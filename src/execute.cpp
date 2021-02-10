@@ -106,7 +106,7 @@ win32execute(const char* path,
   }
 
   std::string args = Win32Util::argv_to_string(argv, sh);
-  std::string full_path = Win32Util::add_exe_suffix(path);
+  std::string full_path = path;
   std::string tmp_file_path;
   if (args.length() > 8192) {
     TemporaryFile tmp_file(path);
@@ -114,6 +114,43 @@ win32execute(const char* path,
     args = FMT("\"@{}\"", tmp_file.path);
     tmp_file_path = tmp_file.path;
   }
+
+  // https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessa :
+  // "To run a batch file, you must start the command interpreter; set lpApplicationName to cmd.exe and set lpCommandLine to the following arguments: /c plus the name of the batch file."
+  if (!strcmp(full_path.c_str() + full_path.length() - 4, ".bat")) {
+    /* Windows command line interpreter limitations on .bat files:
+        C:\foo>type "a b\a.bat"
+        @echo A %*
+        C:\foo>cmd /c "C:\foo\a b\a.bat" foo bar
+        A foo bar
+        C:\foo>cmd /c "C:\foo\a b\a.bat" "foo" bar
+        'C:\foo\a' is not recognized as an internal or external command, operable program or batch file.
+    */
+
+#  ifndef NDEBUG
+    if (!!strstr(full_path.c_str(), " ") && !!strstr(args.c_str(), "\"")) {
+      LOG(
+        "Attempting to execute a 1) .bat script 2) in a path that "
+        "contains spaces [ {} ] and 3) the command line parameters also need "
+        "escaping with quotes: [ {} ]. Windows interpreter cannot handle this "
+        "combination! Please move the .bat script to a directory that does not "
+        "contain spaces.",
+        full_path,
+        args);
+    }
+#  endif
+    full_path = getenv("COMSPEC");
+    if (full_path.empty()) {
+      LOG(
+        "Cannot execute .bat files ({}) unless COMSPEC= environment variable is "
+        "set! (should point to cmd.exe, e.g. C:\\WINDOWS\\system32\\cmd.exe)", path);
+      return -1;
+    }
+    args = "/c " + args;
+  }
+
+//  printf("full_path: %s\n", full_path.c_str());
+//  printf("args: %s\n", args.c_str());
   BOOL ret = CreateProcess(full_path.c_str(),
                            const_cast<char*>(args.c_str()),
                            nullptr,
@@ -236,25 +273,42 @@ find_executable_in_path(const std::string& name,
 
   // Search the path looking for the first compiler of the right name that isn't
   // us.
-  for (const std::string& dir : Util::split_into_strings(path, PATH_DELIM)) {
 #ifdef _WIN32
-    char namebuf[MAX_PATH];
-    int ret = SearchPath(
-      dir.c_str(), name.c_str(), nullptr, sizeof(namebuf), namebuf, nullptr);
-    if (!ret) {
-      std::string exename = FMT("{}.exe", name);
-      ret = SearchPath(dir.c_str(),
-                       exename.c_str(),
+  // If the executable we are looking for already contains the file suffix ("clang.exe"), search
+  // specifically for file with that suffix. If the executable instead does not have a suffix
+  // ("emcc"), then search for suffixes in order: emcc.exe, emcc.bat, emcc.cmd.
+  // N.B. One could use the Windows env. var PATHEXT for this to match the exact execution order
+  // that Windows shell looks for the paths, but that seems overkill, as it contains a number of
+  // suffixes that will never likely make sense for ccache (".vbs", ".wsf"), and the script
+  // execution order is rare to be configured to be nonstandard (exe -> bat -> cmd is the canonical
+  // order)
+
+  std::string exenames[3] = { name };
+  int num_executable_suffixes = 1;
+  if (name.find('.') == name.npos) {
+    exenames[0] = FMT("{}.exe", name);
+    exenames[1] = FMT("{}.bat", name);
+    exenames[2] = FMT("{}.cmd", name);
+    num_executable_suffixes = 3;
+  }
+
+  for (const std::string& dir : Util::split_into_strings(path, PATH_DELIM)) {
+    for (size_t i = 0; i < num_executable_suffixes; ++i) {
+      char namebuf[MAX_PATH];
+      int ret = SearchPath(dir.c_str(),
+                       exenames[i].c_str(),
                        nullptr,
                        sizeof(namebuf),
                        namebuf,
                        nullptr);
+      (void)exclude_name;
+      if (ret) {
+        return namebuf;
+      }
     }
-    (void)exclude_name;
-    if (ret) {
-      return namebuf;
-    }
+  }
 #else
+  for (const std::string& dir : Util::split_into_strings(path, PATH_DELIM)) {
     ASSERT(!exclude_name.empty());
     std::string fname = FMT("{}/{}", dir, name);
     auto st1 = Stat::lstat(fname);
@@ -272,8 +326,8 @@ find_executable_in_path(const std::string& name,
       // Found it!
       return fname;
     }
-#endif
   }
+#endif
 
   return {};
 }
