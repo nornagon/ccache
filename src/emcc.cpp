@@ -153,6 +153,22 @@ read_file_to_string(const char* filename)
   return s;
 }
 
+#ifdef _WIN32
+#  define DIR_SEPARATOR '\\'
+#  define is_dir_separator(x) ((x) == '\\' || (x) == '/')
+#else
+#  define DIR_SEPARATOR '/'
+#  define is_dir_separator(x) ((x) == '/')
+#endif
+
+static std::string join_path(const std::string &lhs, const std::string &rhs)
+{
+  if (is_dir_separator(lhs[lhs.length() - 1]))
+    return lhs + rhs;
+  else
+    return lhs + DIR_SEPARATOR + rhs;
+}
+
 static std::string find_em_cache_directory(const Context &ctx)
 {
   // 1. read cache setting from command line
@@ -198,6 +214,11 @@ static std::string find_em_cache_directory(const Context &ctx)
       }
     }
   }
+  // 4. If cache_directory is empty at this point, we are in a hard situation.
+  // The cache will either be taken from 'cache' under emscripten root directory,
+  // or from user home directory, if emscripten root directory is not writable,
+  // or if FROZEN_CACHE is set. To be safe, return empty string, which will
+  // cause ccache to be disabled at this point altogether.
   return cache_directory;
 }
 
@@ -264,18 +285,12 @@ git_read_repository_hash(const std::string& repository_path)
   return trim_string(result, result + nb);
 }
 
-#ifdef _WIN32
-#  define PATH_DELIMITER '\\'
-#else
-#  define PATH_DELIMITER '/'
-#endif
-
 std::string
 get_directory_part(const std::string& absolute_path)
 {
   int i = absolute_path.length() - 1;
   while (i > 0) {
-    if (absolute_path[i] == PATH_DELIMITER)
+    if (absolute_path[i] == DIR_SEPARATOR)
       return absolute_path.substr(
         0, i + 1); // Include the path delimiter character
     --i;
@@ -308,11 +323,14 @@ read_emcc_context(Context& ctx)
   LOG("EM_CONFIG: {}", ctx.emcc_context.em_config_filename);
 
   // Read EM_CACHE from cmdline, env. var or config
-  ctx.emcc_context.em_cache_filename = find_em_cache_directory(ctx);
-  if (ctx.emcc_context.em_cache_filename.empty()) {
+  ctx.emcc_context.em_cache_timestamp_filename = find_em_cache_directory(ctx);
+  if (ctx.emcc_context.em_cache_timestamp_filename.empty()) {
     return Statistic::compiler_check_failed;
   }
-  LOG("EM_CACHE: {}", ctx.emcc_context.em_cache_filename);
+
+  ctx.emcc_context.em_cache_timestamp_filename = join_path(
+    ctx.emcc_context.em_cache_timestamp_filename, "sysroot_install.stamp");
+  LOG("EM_CACHE: {}", ctx.emcc_context.em_cache_timestamp_filename);
 
   // Read Emscripten compiler version (either git hash or version number)
   std::string compiler_directory = get_directory_part(ctx.orig_args[0]);
@@ -358,5 +376,7 @@ hash_emcc_common_state(const Context& ctx,
   // Hash EM_CACHE sysroot generation timestamp file last modification time, so that if something
   // changes in the sysroot cache, the cache is reset.
   hash.hash_delimiter("EM_CACHE");
-  hash.hash(Stat::stat(ctx.emcc_context.em_cache_filename, Stat::OnError::throw_error).mtime());
+  hash.hash(Stat::stat(ctx.emcc_context.em_cache_timestamp_filename,
+                       Stat::OnError::throw_error)
+              .mtime());
 }

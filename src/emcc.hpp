@@ -13,7 +13,7 @@ class EmccContext : NonCopyable
 {
 public:
   std::string em_config_filename;
-  std::string em_cache_filename;
+  std::string em_cache_timestamp_filename;
   std::string compiler_version;
   bool strict;
 };
