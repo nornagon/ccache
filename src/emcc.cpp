@@ -1,3 +1,61 @@
+/*
+* Emscripten support for ccache.
+* 
+* Emscripten is implemented as two compiler executables "emcc" and "em++", with accompanied .bat file launchers on Windows.
+* 
+* The compiler is for the most parts a GCC/Clang compatible, with same compile time flags, that are passed directly to Clang, which Emscripten uses as a backend.
+* The set of link time flags differs a lot though, but fortunately ccache does not need to care about those.
+* 
+* Special Emscripten unique flags that need extra logic to handle:
+* 
+* --default-obj-ext <.ext> (affects output artifact filename)
+* --cache <path>           (specifies cache directory, interacts with EM_CONFIG file, and EM_CONFIG env. var)
+* --em-config <path>       (specifies config file, interacts with EM_CONFIG env. var)
+* -s STRICT[=0/1]          (specifies compilation mode, interacts with EMCC_STRICT env. var)
+* 
+* See also the set of environment variables that affect Emscripten compilation output below (emcc_env_vars array)
+* 
+* Emscripten command line flags that affect preprocessor output:
+*
+* -pthread                    (injects -D__EMSCRIPTEN_PTHREADS__ to compiled code)
+* -s USE_PTHREADS[=0/1]       (injects -D__EMSCRIPTEN_PTHREADS__ to compiled code)
+* -s EMSCRIPTEN_TRACING[=0/1] (injects -D__EMSCRIPTEN_TRACING__ to compiled code)
+* -s STRICT[=0/1]             (injects -DEMSCRIPTEN to compiled code)
+* -s STB_IMAGE[=0/1]          (injects -DSTB_IMAGE_IMPLEMENTATION to compiled code)
+* 
+* Emscripten unique compile time flags that affect compilation output (but not preprocessor):
+* 
+* --llvm-opts <level>
+* -s MEMORY64[=0/1]
+* -s DISABLE_EXCEPTION_CATCHING[=0/1]
+* -s EXCEPTION_CATCHING_ALLOWED[=0/1]
+* -s RELOCATABLE[=0/1]
+* -s MAIN_MODULE[=0/1]
+* -s SIDE_MODULE[=0/1]
+* -s DEFAULT_TO_CXX[=0/1]
+* 
+* General (non compile time) flags that should just cause ccache to disable itself to avoid any complications:
+* 
+* --check
+* --clear-cache
+* --clear-ports
+* --show-ports
+* --cflags
+* 
+* Emscripten unique compile time flags that do not affect compilation output, but they do affect stdout results (so ccache should also key on these):
+* 
+* -v
+* -Wwarn-absolute-paths
+* --valid-abspath path
+* -s VERBOSE[=0/1]
+*
+* Apart from the -s flags listed above, Emscripten has a lot of other -s FOO settings, but they are all link time only settings (so ccache can ignore those).
+* The ccache support implementation here does not however treat those specially, but instead the cache *is* keyed on even the -s flags that
+* do not affect compilation. The rationale for this is that:
+*  - developers do not generally pass any of the link time -s flags at compile time anyway,
+*  - if they do, the accident is benign (one gets a bit excess caching)
+*  - if a new -s flag is added that does affect compilation (or one was accidentally missed by a bug), it will not need to be added here, but will automatically be recognized
+*/
 #include "Context.hpp"
 #include "Logging.hpp"
 #include "assertions.hpp"
