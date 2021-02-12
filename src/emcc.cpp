@@ -188,7 +188,7 @@ static std::string find_em_cache_directory(const Context &ctx)
 
   std::string cache_directory;
   const char* pos = em_config_contents.c_str();
-  while (pos = strstr(pos, "CACHE")) {
+  while ((pos = strstr(pos, "CACHE"))) {
     if (!(pos == em_config_contents.c_str() || pos[-1] == ' ' || pos[-1] == '\t'
           || pos[-1] == '\n')) {
       ++pos; // This is a substring of another variable, skip to next
@@ -234,6 +234,7 @@ std::string trim_string(const char *start, const char *end)
 std::string
 git_read_repository_hash(const std::string& repository_path)
 {
+#ifdef _WIN32
   PROCESS_INFORMATION pi;
   memset(&pi, 0x00, sizeof(pi));
 
@@ -283,6 +284,37 @@ git_read_repository_hash(const std::string& repository_path)
     exit(3);
   }
   return trim_string(result, result + nb);
+
+#else
+
+#define die(e) do { fprintf(stderr, "%s\n", e); exit(EXIT_FAILURE); } while (0);
+
+  int streams[2] = {};
+  if (pipe(streams) == -1) {
+    die("pipe");
+  }
+  pid_t pid = fork();
+  if (pid == -1) {
+    die("fork");
+  }
+  if (pid == 0) {
+    dup2(streams[1], STDOUT_FILENO);
+    close(streams[0]);
+    close(streams[1]);
+    printf("Executing\n");
+    int ret = execlp("git", ("--git-dir=" + join_path(repository_path, ".git")).c_str(), "rev-parse", "HEAD", (char*)0);
+    printf("Failed to execute: ret: %d, errno: %d\n", ret, errno);
+    die("execl");
+  } else {
+    close(streams[1]);
+    char result[256] = {};
+    int nb = read(streams[0], result, sizeof(result));
+    if (nb < 20) // should be a hash, so 40 bytes at least.
+      die("read");
+    wait(NULL);
+    return trim_string(result, result + sizeof(result));
+  }
+#endif
 }
 
 std::string
