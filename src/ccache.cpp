@@ -54,6 +54,7 @@
 #include "fmtmacros.hpp"
 #include "hashutil.hpp"
 #include "language.hpp"
+#include "emcc.hpp"
 
 #include "third_party/fmt/core.h"
 #include "third_party/nonstd/optional.hpp"
@@ -340,6 +341,8 @@ guess_compiler(string_view path)
     return CompilerType::gcc;
   } else if (name.find("nvcc") != nonstd::string_view::npos) {
     return CompilerType::nvcc;
+  } else if (name.find("emcc") != nonstd::string_view::npos || name.find("em++") != nonstd::string_view::npos) {
+    return CompilerType::emcc;
   } else if (name == "pump" || name == "distcc-pump") {
     return CompilerType::pump;
   } else {
@@ -1365,19 +1368,24 @@ hash_common_info(const Context& ctx,
   hash.hash_delimiter("cc_name");
   hash.hash(Util::base_name(args[0]));
 
-  // Hash variables that may affect the compilation.
-  const char* always_hash_env_vars[] = {
-    // From <https://gcc.gnu.org/onlinedocs/gcc/Environment-Variables.html>:
-    "COMPILER_PATH",
-    "GCC_COMPARE_DEBUG",
-    "GCC_EXEC_PREFIX",
-    // Note: SOURCE_DATE_EPOCH is handled in hash_source_code_string().
-  };
-  for (const char* name : always_hash_env_vars) {
-    const char* value = getenv(name);
-    if (value) {
-      hash.hash_delimiter(name);
-      hash.hash(value);
+  // Hash environment variables that may affect the compilation.
+  if (ctx.config.compiler_type() == CompilerType::emcc) {
+    hash_emcc_common_state(ctx, args, hash, args_info);
+  } else {
+    // Hash gcc, clang, nvcc and other common state:
+    const char* always_hash_env_vars[] = {
+      // From <https://gcc.gnu.org/onlinedocs/gcc/Environment-Variables.html>:
+      "COMPILER_PATH",
+      "GCC_COMPARE_DEBUG",
+      "GCC_EXEC_PREFIX",
+      // Note: SOURCE_DATE_EPOCH is handled in hash_source_code_string().
+    };
+    for (const char* name : always_hash_env_vars) {
+      const char* value = getenv(name);
+      if (value) {
+        hash.hash_delimiter(name);
+        hash.hash(value);
+      }
     }
   }
 
@@ -2363,6 +2371,14 @@ do_cache_compilation(Context& ctx, const char* const* argv)
     LOG_RAW("ccache is disabled");
     // Statistic::cache_miss is a dummy to trigger stats_flush.
     throw Failure(Statistic::cache_miss);
+  }
+
+  // Certain environment variables should disable ccache on Emscripten.
+  if (ctx.config.compiler_type() == CompilerType::emcc) {
+    auto s = read_emcc_context(ctx);
+    if (s != nullopt) {
+      throw Failure(s.value());
+    }
   }
 
   LOG("Command line: {}", Util::format_argv_for_logging(argv));

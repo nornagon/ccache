@@ -29,6 +29,7 @@
 #include "MiniTrace.hpp"
 #include "NonCopyable.hpp"
 #include "Sloppiness.hpp"
+#include "emcc.hpp"
 
 #ifdef INODE_CACHE_SUPPORTED
 #  include "InodeCache.hpp"
@@ -60,6 +61,9 @@ public:
 
   // The original argument list.
   Args orig_args;
+
+  // Emscripten compiler specific state (environment variables).
+  EmccContext emcc_context;
 
   // Name (represented as a hash) of the file containing the manifest for the
   // cached result.

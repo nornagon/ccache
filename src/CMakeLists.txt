@@ -38,6 +38,7 @@ set(
   cleanup.cpp
   compopt.cpp
   compress.cpp
+  emcc.cpp
   execute.cpp
   hashutil.cpp
   language.cpp

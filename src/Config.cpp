@@ -235,6 +235,8 @@ parse_compiler_type(const std::string& value)
     return CompilerType::gcc;
   } else if (value == "nvcc") {
     return CompilerType::nvcc;
+  } else if (value == "emcc" || value == "em++" || value == "emcc.bat" || value == "em++.bat" || value == "emcc.py" || value == "em++.py") {
+    return CompilerType::emcc;
   } else if (value == "other") {
     return CompilerType::other;
   } else if (value == "pump") {
@@ -429,6 +431,7 @@ compiler_type_to_string(CompilerType compiler_type)
     CASE(clang);
     CASE(gcc);
     CASE(nvcc);
+    CASE(emcc);
     CASE(other);
     CASE(pump);
   }

@@ -54,14 +54,23 @@ struct CompOpt
 const CompOpt compopts[] = {
   {"--Werror", TAKES_ARG},                            // nvcc
   {"--analyze", TOO_HARD},                            // Clang
-  {"--compiler-bindir", AFFECTS_CPP | TAKES_ARG},     // nvcc
-  {"--libdevice-directory", AFFECTS_CPP | TAKES_ARG}, // nvcc
-  {"--output-directory", AFFECTS_CPP | TAKES_ARG},    // nvcc
+  {"--cache", TAKES_ARG | TAKES_CONCAT_ARG | AFFECTS_COMP}, // Emscripten
+  {"--cflags", TOO_HARD},                                         // Emscripten
+  {"--check", TOO_HARD},                                          // Emscripten
+  {"--clear-cache", TOO_HARD},                                    // Emscripten
+  {"--clear-ports", TOO_HARD},                                    // Emscripten
+  {"--compiler-bindir", AFFECTS_CPP | TAKES_ARG},                 // nvcc
+  {"--default-obj-ext", TAKES_ARG | TAKES_CONCAT_ARG | TOO_HARD}, // Emscripten
+  {"--em-config", TAKES_ARG | TAKES_CONCAT_ARG | AFFECTS_COMP},   // Emscripten
+  {"--libdevice-directory", AFFECTS_CPP | TAKES_ARG},           // nvcc
+  {"--llvm-opts", TAKES_ARG | TAKES_CONCAT_ARG | AFFECTS_COMP}, // Emscripten
+  {"--output-directory", AFFECTS_CPP | TAKES_ARG},              // nvcc
   {"--param", TAKES_ARG},
   {"--save-temps", TOO_HARD},
   {"--save-temps=cwd", TOO_HARD},
   {"--save-temps=obj", TOO_HARD},
   {"--serialize-diagnostics", TAKES_ARG | TAKES_PATH},
+  {"--show-ports", TOO_HARD}, // Emscripten
   {"-A", TAKES_ARG},
   {"-B", TAKES_ARG | TAKES_CONCAT_ARG | TAKES_PATH},
   {"-D", AFFECTS_CPP | TAKES_ARG | TAKES_CONCAT_ARG},
@@ -128,24 +137,13 @@ const CompOpt compopts[] = {
   {"-preload", AFFECTS_COMP},
   {"-rdynamic", AFFECTS_COMP},
   {"-remap", AFFECTS_CPP},
+  {"-s", TAKES_ARG | TAKES_CONCAT_ARG | AFFECTS_COMP}, // Emscripten
   {"-save-temps", TOO_HARD},
   {"-save-temps=cwd", TOO_HARD},
   {"-save-temps=obj", TOO_HARD},
   {"-stdlib=", AFFECTS_CPP | TAKES_CONCAT_ARG},
   {"-trigraphs", AFFECTS_CPP},
   {"-u", TAKES_ARG | TAKES_CONCAT_ARG},
-
-  {"--cache", TAKES_ARG | TAKES_CONCAT_ARG | AFFECTS_COMP},       // Emscripten
-  {"--em-config", TAKES_ARG | TAKES_CONCAT_ARG | AFFECTS_COMP},   // Emscripten
-  {"--llvm-opts", TAKES_ARG | TAKES_CONCAT_ARG | AFFECTS_COMP},   // Emscripten
-  {"--default-obj-ext", TOO_HARD | TAKES_ARG | TAKES_CONCAT_ARG}, // Emscripten
-  {"--check", TOO_HARD}, // Emscripten
-  {"--clear-cache", TOO_HARD}, // Emscripten
-  {"--clear-ports", TOO_HARD}, // Emscripten
-  {"--show-ports", TOO_HARD}, // Emscripten
-  {"--cflags", TOO_HARD}, // Emscripten
-  {"-s", TAKES_ARG | TAKES_CONCAT_ARG | AFFECTS_COMP},            // Emscripten
-  {"-v", 0}, // Emscripten
 };
 
 static int
