@@ -291,26 +291,26 @@ git_read_repository_hash(const std::string& repository_path)
 
   int streams[2] = {};
   if (pipe(streams) == -1) {
-    die("pipe");
+    die("pipe failed!");
   }
+
+  std::string git_dir = "--git-dir=" + join_path(repository_path, ".git");
   pid_t pid = fork();
   if (pid == -1) {
-    die("fork");
+    die("fork failed!");
   }
   if (pid == 0) {
     dup2(streams[1], STDOUT_FILENO);
     close(streams[0]);
     close(streams[1]);
-    printf("Executing\n");
-    int ret = execlp("git", ("--git-dir=" + join_path(repository_path, ".git")).c_str(), "rev-parse", "HEAD", (char*)0);
-    printf("Failed to execute: ret: %d, errno: %d\n", ret, errno);
-    die("execl");
+    execlp("git", "git", git_dir.c_str(), "rev-parse", "HEAD", (char*)0);
+    die("execlp failed!");
   } else {
     close(streams[1]);
     char result[256] = {};
     int nb = read(streams[0], result, sizeof(result));
     if (nb < 20) // should be a hash, so 40 bytes at least.
-      die("read");
+      die("read failed!");
     wait(NULL);
     return trim_string(result, result + sizeof(result));
   }
