@@ -122,11 +122,47 @@ static const char *read_param_from_cmdline(const Args& args, std::string param)
   return 0;
 }
 
+static const char *read_emcc_s_param_from_cmdline(const Args& args, std::string param)
+{
+  std::string paramEq = param + '=';
+  std::string paramSEq = "-s" + param + '=';
+
+  for (size_t i = 1; i < args.size(); i++) {
+    if (args[i] == "-s") {
+      if (i + 1 >= args.size()) {
+        return 0;
+      }
+      // "-s FOO=<value>"
+      if (starts_with(args[i + 1].c_str(), paramEq.c_str())) {
+        return args[i + 1].c_str() + paramEq.length();
+      }
+      // "-s FOO" produces an implicit true.
+      if (args[i + 1] == param) {
+        return "1";
+      }
+    }
+
+    // "-sFOO=<value>"
+    if (starts_with(args[i].c_str(), paramSEq.c_str())) {
+      return args[i].c_str() + paramSEq.length();
+    }
+  }
+  return 0;
+}
+
 static std::string find_em_config_filename(const Args& args)
 {
   const char* em_config = read_param_from_cmdline(args, "--em-config");
   if (em_config) return em_config;
   return getenv("EM_CONFIG");
+}
+
+static bool find_emcc_strict_value(const Args& args)
+{
+  const char* strict = read_emcc_s_param_from_cmdline(args, "STRICT");
+  if (!strict) strict = getenv("EMCC_STRICT");
+  if (!strict) return false;
+  return !!strcmp(strict, "0");
 }
 
 static std::string
@@ -161,14 +197,7 @@ read_file_to_string(const char* filename)
 #  define is_dir_separator(x) ((x) == '/')
 #endif
 
-static std::string join_path(const std::string &lhs, const std::string &rhs)
-{
-  if (is_dir_separator(lhs[lhs.length() - 1]))
-    return lhs + rhs;
-  else
-    return lhs + DIR_SEPARATOR + rhs;
-}
-
+#if 0
 static std::string find_em_cache_directory(const Context &ctx)
 {
   // 1. read cache setting from command line
@@ -221,6 +250,7 @@ static std::string find_em_cache_directory(const Context &ctx)
   // cause ccache to be disabled at this point altogether.
   return cache_directory;
 }
+#endif
 
 std::string trim_string(const char *start, const char *end)
 {
@@ -286,6 +316,14 @@ git_read_repository_hash(const std::string& repository_path)
   return trim_string(result, result + nb);
 
 #else
+
+static std::string join_path(const std::string &lhs, const std::string &rhs)
+{
+  if (is_dir_separator(lhs[lhs.length() - 1]))
+    return lhs + rhs;
+  else
+    return lhs + DIR_SEPARATOR + rhs;
+}
 
 #define die(e) do { fprintf(stderr, "%s\n", e); exit(EXIT_FAILURE); } while (0);
 
@@ -354,6 +392,10 @@ read_emcc_context(Context& ctx)
   }
   LOG("EM_CONFIG: {}", ctx.emcc_context.em_config_filename);
 
+  // Currently we always only link in the system files at final link step, so
+  // applications can/should not be linking in system lib files at compilation
+  // stage, so if content in the cache changes, it won't matter.
+#if 0
   // Read EM_CACHE from cmdline, env. var or config
   ctx.emcc_context.em_cache_timestamp_filename = find_em_cache_directory(ctx);
   if (ctx.emcc_context.em_cache_timestamp_filename.empty()) {
@@ -363,6 +405,10 @@ read_emcc_context(Context& ctx)
   ctx.emcc_context.em_cache_timestamp_filename = join_path(
     ctx.emcc_context.em_cache_timestamp_filename, "sysroot_install.stamp");
   LOG("EM_CACHE: {}", ctx.emcc_context.em_cache_timestamp_filename);
+#endif
+
+  // Read value of -s STRICT[=0/1]
+  ctx.emcc_context.strict = find_emcc_strict_value(ctx.orig_args);
 
   // Read Emscripten compiler version (either git hash or version number)
   std::string compiler_directory = get_directory_part(ctx.orig_args[0]);
@@ -376,6 +422,8 @@ read_emcc_context(Context& ctx)
                   ctx.emcc_context.compiler_version.c_str()
                     + ctx.emcc_context.compiler_version.length());
   }
+
+  // Read strict.
 
   return nonstd::nullopt;
 }
@@ -405,10 +453,19 @@ hash_emcc_common_state(const Context& ctx,
   hash.hash_delimiter("EMCC_VER");
   hash.hash(ctx.emcc_context.compiler_version);
 
+  // Hash the value of -s STRICT
+  hash.hash_delimiter("EMCC_STRICT");
+  hash.hash((int)ctx.emcc_context.strict);
+
+  // Currently we always only link in the system files at final link step, so
+  // applications can/should not be linking in system lib files at compilation stage, so
+  // if content in the cache changes, it won't matter.
+#if 0
   // Hash EM_CACHE sysroot generation timestamp file last modification time, so that if something
   // changes in the sysroot cache, the cache is reset.
   hash.hash_delimiter("EM_CACHE");
   hash.hash(Stat::stat(ctx.emcc_context.em_cache_timestamp_filename,
                        Stat::OnError::throw_error)
               .mtime());
+#endif
 }
