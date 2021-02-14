@@ -268,6 +268,17 @@ std::string trim_string(const char *start, const char *end)
   return std::string(start, end);
 }
 
+#ifndef _WIN32
+static std::string
+join_path(const std::string& lhs, const std::string& rhs)
+{
+  if (is_dir_separator(lhs[lhs.length() - 1]))
+    return lhs + rhs;
+  else
+    return lhs + DIR_SEPARATOR + rhs;
+}
+#endif
+
 std::string
 git_read_repository_hash(const std::string& repository_path)
 {
@@ -323,14 +334,6 @@ git_read_repository_hash(const std::string& repository_path)
   return trim_string(result, result + nb);
 
 #else
-
-static std::string join_path(const std::string &lhs, const std::string &rhs)
-{
-  if (is_dir_separator(lhs[lhs.length() - 1]))
-    return lhs + rhs;
-  else
-    return lhs + DIR_SEPARATOR + rhs;
-}
 
 #define die(e) do { fprintf(stderr, "%s\n", e); exit(EXIT_FAILURE); } while (0);
 
