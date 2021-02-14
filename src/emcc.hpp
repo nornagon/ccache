@@ -5,6 +5,7 @@
 #include "Hash.hpp"
 #include "NonCopyable.hpp"
 #include "Statistic.hpp"
+#include "argprocessing.hpp"
 #include "third_party/nonstd/optional.hpp"
 
 class Context;
@@ -26,7 +27,13 @@ public:
 
 nonstd::optional<Statistic> read_emcc_context(Context& ctx);
 
+nonstd::optional<Statistic> process_emcc_arg(Context& ctx,
+                                             Args& args,
+                                             size_t& args_index,
+                                             ArgumentProcessingState& state);
+
 void hash_emcc_common_state(const Context& ctx,
                           const Args& args,
                           Hash& hash,
                           const ArgsInfo& args_info);
+

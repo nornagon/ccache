@@ -25,6 +25,10 @@
 * 
 * Emscripten unique compile time flags that affect compilation output (but not preprocessor):
 * 
+* -profiling and --profiling
+* --minify <level>
+* -s INLINING_LIMIT[=0/1]
+* -gseparate-dwarf[=FILENAME]
 * --llvm-opts <level>
 * -s MEMORY64[=0/1]
 * -s DISABLE_EXCEPTION_CATCHING[=0/1]
@@ -42,7 +46,7 @@
 * --show-ports
 * --cflags
 * 
-* Emscripten unique compile time flags that do not affect compilation output, but they do affect stdout results (so ccache should also key on these):
+* Emscripten unique compile time flags that do not affect compilation output, but they do affect stdout results both when compiling and preprocessing (so ccache should also key on these):
 * 
 * -v
 * -Wwarn-absolute-paths
@@ -60,6 +64,9 @@
 #include "Logging.hpp"
 #include "assertions.hpp"
 #include "emcc.hpp"
+
+using nonstd::nullopt;
+using nonstd::optional;
 
 // The following Emscripten environment variables should be keyed into the common cache hash (can affect C++ preprocessing, compilation, and/or compilation stdout output message)
 static const char* emcc_env_vars[] = {
@@ -368,7 +375,175 @@ get_directory_part(const std::string& absolute_path)
   return std::string();
 }
 
-nonstd::optional<Statistic>
+bool string_starts_with_any_of(const char *str, const char **prefixes) {
+  while (*prefixes) {
+    if (starts_with(str, *prefixes) && str[strlen(*prefixes)] == '=')
+      return true;
+    ++prefixes;
+  }
+  return false;
+}
+
+bool
+string_is_any_of(const char* str, const char** candidates)
+{
+  while (*candidates) {
+    if (!strcmp(str, *candidates))
+      return true;
+    ++candidates;
+  }
+  return false;
+}
+
+
+optional<Statistic>
+process_emcc_arg(Context& /*ctx*/,
+                 Args& args,
+                 size_t& i,
+                 ArgumentProcessingState& state)
+{
+  // Deduce whether this is a special Emscripten argument that either affects C
+  // preprocessor + compiler, or just the compiler result only.
+
+  // The following options should disable ccache from operating. (These are
+  // never used when compiling a source file, but currently Emscripten does not
+  // prevent them to be passed, so be explicit to avoid confusion)
+  const char* too_hard[] = {
+    "--cflags", "--check", "--clear-cache", "--clear-ports", "--show-ports", 0};
+  if (string_is_any_of(args[i].c_str(), too_hard)) {
+    return Statistic::unsupported_compiler_option;
+  }
+
+  // Options that take an arg: disable ccache
+  const char* too_hard_arg[] = {"--default-obj-ext", 0};
+  if (string_is_any_of(args[i].c_str(), too_hard_arg)) {
+    ++i; // consume next as well
+    return Statistic::unsupported_compiler_option;
+  }
+  // Test prefix form "--foo=value":
+  if (string_starts_with_any_of(args[i].c_str(), too_hard_arg)) {
+    return Statistic::unsupported_compiler_option;
+  }
+
+  // Options that take an arg "--foo value" and affect C preprocessor and
+  // compiler
+  const char* common_arg[] = {"--valid-abspath", "--minify", 0};
+  if (string_is_any_of(args[i].c_str(), common_arg)) {
+    if (i + 1 >= args.size()) {
+      LOG("Missing argument to {}", args[i]);
+      return Statistic::bad_compiler_arguments;
+    }
+    state.common_args.push_back(args[i]);
+    state.common_args.push_back(args[i + 1]);
+    ++i;
+    return Statistic::none;
+  }
+  // Test prefix form "--foo=value":
+  if (string_starts_with_any_of(args[i].c_str(), common_arg)) {
+    state.common_args.push_back(args[i]);
+    return Statistic::none;
+  }
+
+  // Options that do not take an arg; and affect C preprocessor and compiler
+  const char* common[] = {"-v", "-Wwarn-absolute-paths", "-pthread", 0};
+  if (string_is_any_of(args[i].c_str(), common)) {
+    state.common_args.push_back(args[i]);
+    return Statistic::none;
+  }
+
+  // Options that take an arg "--foo value" and affect compilation but not C
+  // preprocessor
+  const char* compiler_only_arg[] = {"--llvm-opts", 0};
+  if (args[i] == "--llvm-opts") {
+    if (i + 1 >= args.size()) {
+      LOG("Missing argument to {}", args[i]);
+      return Statistic::bad_compiler_arguments;
+    }
+    state.compiler_only_args.push_back(args[i]);
+    state.compiler_only_args.push_back(args[i + 1]);
+    ++i;
+    return Statistic::none;
+  }
+  // Test prefix form "--foo=value":
+  if (string_starts_with_any_of(args[i].c_str(), compiler_only_arg)) {
+    state.compiler_only_args.push_back(args[i]);
+    return Statistic::none;
+  }
+
+  // Options that do not take an arg; only affect compilation
+  const char* compiler_only[] = {
+    "-profiling", "--profiling", "-gseparate-dwarf", 0};
+  if (string_is_any_of(args[i].c_str(), compiler_only)) {
+    state.compiler_only_args.push_back(args[i]);
+    return Statistic::none;
+  }
+
+  // Option prefixes that do not take an arg; only affect compilation
+  const char* compiler_only_prefixes[] = {"-gseparate-dwarf", 0};
+  if (string_starts_with_any_of(args[i].c_str(), compiler_only_prefixes)) {
+    state.compiler_only_args.push_back(args[i]);
+    return Statistic::none;
+  }
+
+  // -s settings that affect preprocessor + compiler
+  const char* s_common[] = {
+    "STRICT", "USE_PTHREADS", "EMSCRIPTEN_TRACING", "STB_IMAGE", "VERBOSE", 0};
+
+  // -s settings that affect compiler only
+  const char* s_compiler[] = {"INLINING_LIMIT",
+                              "MEMORY64",
+                              "DISABLE_EXCEPTION_CATCHING",
+                              "EXCEPTION_CATCHING_ALLOWED",
+                              "RELOCATABLE",
+                              "MAIN_MODULE",
+                              "SIDE_MODULE",
+                              "DEFAULT_TO_CXX",
+                              0};
+
+  if (args[i] == "-s") {
+    if (i + 1 >= args.size()) {
+      LOG("Missing argument to {}", args[i]);
+      return Statistic::bad_compiler_arguments;
+    }
+    if (string_is_any_of(args[i + 1].c_str(), s_common) // "-s STRICT"
+        || string_starts_with_any_of(args[i + 1].c_str(),
+                                     s_common)) // "-s STRICT="
+    {
+      state.common_args.push_back(args[i]);
+      state.common_args.push_back(args[i + 1]);
+      ++i;
+      return Statistic::none;
+    }
+
+    if (string_is_any_of(args[i + 1].c_str(), s_compiler) // "-s INLINING_LIMIT"
+        || string_starts_with_any_of(args[i + 1].c_str(),
+                                     s_compiler)) { // "-s INLINING_LIMIT="
+      state.compiler_only_args.push_back(args[i]);
+      state.compiler_only_args.push_back(args[i + 1]);
+      ++i;
+      return Statistic::none;
+    }
+  }
+
+  if (starts_with(args[i].c_str(), "-s")) {
+    const char* arg = args[i].c_str() + 2;
+    if (string_is_any_of(arg, s_common)              // "-sSTRICT"
+        || string_starts_with_any_of(arg, s_common)) // "-sSTRICT="
+    {
+      state.common_args.push_back(args[i]);
+      return Statistic::none;
+    }
+    if (string_is_any_of(arg, s_compiler)                // "-sINLINING_LIMIT"
+        || string_starts_with_any_of(arg, s_compiler)) { // "-sINLINING_LIMIT="
+      state.compiler_only_args.push_back(args[i]);
+      return Statistic::none;
+    }
+  }
+
+  return nullopt;
+}
+
+  nonstd::optional<Statistic>
 read_emcc_context(Context& ctx)
 {
   // Look out for environment variables that should disable ccache

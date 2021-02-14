@@ -34,58 +34,6 @@ using nonstd::string_view;
 
 namespace {
 
-enum class ColorDiagnostics : int8_t { never, automatic, always };
-
-struct ArgumentProcessingState
-{
-  bool found_c_opt = false;
-  bool found_dc_opt = false;
-  bool found_S_opt = false;
-  bool found_pch = false;
-  bool found_fpch_preprocess = false;
-  ColorDiagnostics color_diagnostics = ColorDiagnostics::automatic;
-  bool found_directives_only = false;
-  bool found_rewrite_includes = false;
-
-  std::string explicit_language;    // As specified with -x.
-  std::string input_charset_option; // -finput-charset=...
-
-  // Is the dependency makefile name overridden with -MF?
-  bool dependency_filename_specified = false;
-
-  // Is the dependency target name implicitly specified using
-  // DEPENDENCIES_OUTPUT or SUNPRO_DEPENDENCIES?
-  bool dependency_implicit_target_specified = false;
-
-  // Is the compiler being asked to output debug info on level 3?
-  bool generating_debuginfo_level_3 = false;
-
-  // common_args contains all original arguments except:
-  // * those that never should be passed to the preprocessor,
-  // * those that only should be passed to the preprocessor (if run_second_cpp
-  //   is false), and
-  // * dependency options (like -MD and friends).
-  Args common_args;
-
-  // cpp_args contains arguments that were not added to common_args, i.e. those
-  // that should only be passed to the preprocessor if run_second_cpp is false.
-  // If run_second_cpp is true, they will be passed to the compiler as well.
-  Args cpp_args;
-
-  // dep_args contains dependency options like -MD. They are only passed to the
-  // preprocessor, never to the compiler.
-  Args dep_args;
-
-  // compiler_only_args contains arguments that should only be passed to the
-  // compiler, not the preprocessor.
-  Args compiler_only_args;
-
-  // compiler_only_args_no_hash contains arguments that should only be passed to
-  // the compiler, not the preprocessor, and that also should not be part of the
-  // hash identifying the result.
-  Args compiler_only_args_no_hash;
-};
-
 bool
 color_output_possible()
 {
@@ -838,6 +786,13 @@ process_arg(Context& ctx,
     return nullopt;
   }
 
+  // Emscripten compiler specific options
+  if (ctx.config.compiler_type() == CompilerType::emcc) {
+    auto emcc_result = process_emcc_arg(ctx, args, i, state);
+    if (emcc_result.has_value()) {
+      return emcc_result;
+    }
+  }
   // If an argument isn't a plain file then assume its an option, not an input
   // file. This allows us to cope better with unusual compiler options.
   //
