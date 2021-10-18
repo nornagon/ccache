@@ -47,6 +47,7 @@ public:
   const std::string& compiler() const;
   const std::string& compiler_check() const;
   CompilerType compiler_type() const;
+  bool compiler_type_is_clang_like() const;
   bool compression() const;
   int8_t compression_level() const;
   const std::string& cpp_extension() const;
@@ -219,6 +220,13 @@ inline CompilerType
 Config::compiler_type() const
 {
   return m_compiler_type;
+}
+
+inline bool
+Config::compiler_type_is_clang_like() const
+{
+  return m_compiler_type == CompilerType::clang
+         || m_compiler_type == CompilerType::emcc;
 }
 
 inline bool

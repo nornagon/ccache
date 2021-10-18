@@ -105,7 +105,7 @@ process_profiling_option(Context& ctx, const std::string& arg)
     new_profile_path = arg.substr(arg.find('=') + 1);
   } else if (arg == "-fprofile-generate" || arg == "-fprofile-instr-generate") {
     ctx.args_info.profile_generate = true;
-    if (ctx.config.compiler_type() == CompilerType::clang) {
+    if (ctx.config.compiler_type_is_clang_like()) {
       new_profile_path = ".";
     } else {
       // GCC uses $PWD/$(basename $obj).
@@ -635,7 +635,7 @@ process_arg(Context& ctx,
     return nullopt;
   }
 
-  if (config.compiler_type() != CompilerType::clang
+  if (!config.compiler_type_is_clang_like()
       && (args[i] == "-fcolor-diagnostics"
           || args[i] == "-fno-color-diagnostics")) {
     // Special case: If a non-Clang compiler gets -f(no-)color-diagnostics we'll
@@ -1069,7 +1069,7 @@ process_args(Context& ctx)
   // Since output is redirected, compilers will not color their output by
   // default, so force it explicitly.
   nonstd::optional<std::string> diagnostics_color_arg;
-  if (config.compiler_type() == CompilerType::clang) {
+  if (config.compiler_type_is_clang_like()) {
     // Don't pass -fcolor-diagnostics when compiling assembler to avoid an
     // "argument unused during compilation" warning.
     if (args_info.actual_language != "assembler") {

@@ -1558,7 +1558,7 @@ calculate_result_name(Context& ctx,
 
   // clang will emit warnings for unused linker flags, so we shouldn't skip
   // those arguments.
-  int is_clang = ctx.config.compiler_type() == CompilerType::clang
+  int is_clang = ctx.config.compiler_type_is_clang_like()
                  || ctx.config.compiler_type() == CompilerType::other;
 
   // First the arguments.
@@ -1855,7 +1855,7 @@ from_cache(Context& ctx, FromCacheCallMode mode)
   //
   //     file 'foo.h' has been modified since the precompiled header 'foo.pch'
   //     was built
-  if ((ctx.config.compiler_type() == CompilerType::clang
+  if ((ctx.config.compiler_type_is_clang_like()
        || ctx.config.compiler_type() == CompilerType::other)
       && ctx.args_info.output_is_precompiled_header
       && !ctx.args_info.fno_pch_timestamp && mode == FromCacheCallMode::cpp) {
