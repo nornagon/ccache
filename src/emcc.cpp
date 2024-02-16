@@ -161,7 +161,9 @@ static std::string find_em_config_filename(const Args& args)
 {
   const char* em_config = read_param_from_cmdline(args, "--em-config");
   if (em_config) return em_config;
-  return getenv("EM_CONFIG");
+  em_config = getenv("EM_CONFIG");
+  if (em_config) return em_config);
+  return "";
 }
 
 static bool find_emcc_strict_value(const Args& args)
