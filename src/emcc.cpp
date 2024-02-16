@@ -162,7 +162,7 @@ static std::string find_em_config_filename(const Args& args)
   const char* em_config = read_param_from_cmdline(args, "--em-config");
   if (em_config) return em_config;
   em_config = getenv("EM_CONFIG");
-  if (em_config) return em_config);
+  if (em_config) return em_config;
   return "";
 }
 
